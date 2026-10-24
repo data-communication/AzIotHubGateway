@@ -3,6 +3,21 @@ from collections.abc import Awaitable, Callable
 
 from asyncio_mqtt import Client, MqttError
 
+def mqtt_topic_matches(filter: str, topic: str) -> bool:
+    filter_levels = filter.split("/")
+    topic_levels = topic.split("/")
+
+    for f, t in zip(filter_levels, topic_levels):
+        if f == "#":
+            return True
+        if f == "+":
+            continue
+        if f != t:
+            return False
+
+    return len(filter_levels) == len(topic_levels)
+
+
 class MqttService:
     def __init__(self, host="localhost", port=1883, username=None, password=None, identifier=None):
         self.host = host
@@ -27,8 +42,9 @@ class MqttService:
             print("Subscribing to:", topic)
             await client.subscribe(topic)
 
-    async def _receive(self, client: Client):
+    async def _receive(self, client):
         async with client.messages() as messages:
+            # Subscribe to all registered topics
             for topic in self._handlers.keys():
                 await client.subscribe(topic)
 
@@ -37,7 +53,7 @@ class MqttService:
                 payload = message.payload.decode("utf-8")
 
                 for registered_topic, handlers in self._handlers.items():
-                    if topic.startswith(registered_topic):
+                    if mqtt_topic_matches(registered_topic, topic):
                         for handler in handlers:
                             await handler(payload)
 
